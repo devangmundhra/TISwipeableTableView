@@ -14,11 +14,12 @@
 //==========================================================
 
 @interface TISwipeableTableViewController ()
-@property (nonatomic, retain) NSIndexPath * indexOfVisibleBackView;
+@property (nonatomic, strong) NSIndexPath *indexOfVisibleBackView;
 @end
 
 @implementation TISwipeableTableViewController
 @synthesize indexOfVisibleBackView;
+@synthesize swipeDirection;
 
 - (NSIndexPath *)tableView:(UITableView *)tableView willSelectRowAtIndexPath:(NSIndexPath *)indexPath {
 	return ([indexPath compare:indexOfVisibleBackView] == NSOrderedSame) ? nil : indexPath;
@@ -33,9 +34,7 @@
 }
 
 - (void)tableView:(UITableView *)tableView didSwipeCellAtIndexPath:(NSIndexPath *)indexPath {
-	
-	[self hideVisibleBackView:YES];
-	[self setIndexOfVisibleBackView:indexPath];
+
 }
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
@@ -48,24 +47,17 @@
 	
 	[self hideVisibleBackView:animated];
 	
-	if ([cell respondsToSelector:@selector(revealBackViewAnimated:)]){
-		[(TISwipeableTableViewCell *)cell revealBackViewAnimated:animated];
-		[self setIndexOfVisibleBackView:indexPath];
+	if ([cell respondsToSelector:@selector(revealBackViewAnimated:inDirection:)]){
+		[(TISwipeableTableViewCell *)cell revealBackViewAnimated:animated inDirection:UISwipeGestureRecognizerDirectionRight];
 	}
 }
 
 - (void)hideVisibleBackView:(BOOL)animated {
 	
 	UITableViewCell * cell = [self.tableView cellForRowAtIndexPath:indexOfVisibleBackView];
-	if ([cell respondsToSelector:@selector(hideBackViewAnimated:)]){
-		[(TISwipeableTableViewCell *)cell hideBackViewAnimated:animated];
-		[self setIndexOfVisibleBackView:nil];
+	if ([cell respondsToSelector:@selector(hideBackViewAnimated:inDirection:)]) {
+		[(TISwipeableTableViewCell *)cell hideBackViewAnimated:animated inDirection:swipeDirection];
 	}
-}
-
-- (void)dealloc {
-	[indexOfVisibleBackView release];
-	[super dealloc];
 }
 
 @end
@@ -90,7 +82,6 @@
 @interface TISwipeableTableViewCell (Private)
 - (void)initialSetup;
 - (void)resetViews:(BOOL)animated;
-- (CAAnimationGroup *)bounceAnimationWithHideDuration:(CGFloat)hideDuration initialXOrigin:(CGFloat)originalX;
 @end
 
 @implementation TISwipeableTableViewCell
@@ -126,23 +117,27 @@
 	[contentView setOpaque:YES];
 	[contentView setBackgroundColor:[UIColor clearColor]];
 	
-	UISwipeGestureRecognizer * swipeRecognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(cellWasSwiped:)];
-	[swipeRecognizer setDirection:(UISwipeGestureRecognizerDirectionLeft |
-								   UISwipeGestureRecognizerDirectionRight)];
-	[contentView addGestureRecognizer:swipeRecognizer];
-	[swipeRecognizer release];
+	UISwipeGestureRecognizer * frontSwipeRecognizerRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(frontViewWasSwipedRight:)];
+	[frontSwipeRecognizerRight setDirection:UISwipeGestureRecognizerDirectionRight];
+    UISwipeGestureRecognizer * frontSwipeRecognizerLeft = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(frontViewWasSwipedLeft:)];
+	[frontSwipeRecognizerLeft setDirection:UISwipeGestureRecognizerDirectionLeft];
+    [contentView addGestureRecognizer:frontSwipeRecognizerRight];
+	[contentView addGestureRecognizer:frontSwipeRecognizerLeft];
 	
 	backView = [[TISwipeableTableViewCellBackView alloc] initWithFrame:CGRectZero];
 	[backView setOpaque:YES];
 	[backView setClipsToBounds:YES];
 	[backView setHidden:YES];
 	[backView setBackgroundColor:[UIColor clearColor]];
+    
+	UISwipeGestureRecognizer * backSwipeRecognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(backViewWasSwiped:)];
+    // The direction of backview swipe depends on how it was revealed
+	[backSwipeRecognizer setDirection:(UISwipeGestureRecognizerDirectionRight |
+                                       UISwipeGestureRecognizerDirectionLeft)];
+	[backView addGestureRecognizer:backSwipeRecognizer];
 	
 	[self addSubview:backView];
 	[self addSubview:contentView];
-	
-	[contentView release];
-	[backView release];
 	
 	contentViewMoving = NO;
 	shouldBounce = YES;
@@ -229,8 +224,8 @@
 //===============================//
 
 #pragma mark - Back View Show / Hide
-- (void)cellWasSwiped:(UISwipeGestureRecognizer *)recognizer {
-	
+- (void)frontViewWasSwipedRight:(UISwipeGestureRecognizer *)recognizer
+{
 	UITableView * tableView = (UITableView *)self.superview;
 	id delegate = tableView.nextResponder; // Hopefully this is a TISwipeableTableViewController.
 	
@@ -239,9 +234,36 @@
 		NSIndexPath * myIndexPath = [tableView indexPathForCell:self];
 		
 		if ([delegate tableView:tableView shouldSwipeCellAtIndexPath:myIndexPath]){
-			
-			[self revealBackViewAnimated:YES];
-			
+            if ([delegate respondsToSelector:@selector(hideVisibleBackView:)])
+                [delegate hideVisibleBackView:YES];
+			[self revealBackViewAnimated:YES inDirection:UISwipeGestureRecognizerDirectionRight];
+            if ([delegate respondsToSelector:@selector(setIndexOfVisibleBackView:)]) {
+                [delegate setIndexOfVisibleBackView:myIndexPath];
+                [delegate setSwipeDirection:UISwipeGestureRecognizerDirectionRight];
+            }
+			if ([delegate respondsToSelector:@selector(tableView:didSwipeCellAtIndexPath:)]){
+				[delegate tableView:tableView didSwipeCellAtIndexPath:myIndexPath];
+			}
+		}
+	}
+}
+- (void)frontViewWasSwipedLeft:(UISwipeGestureRecognizer *)recognizer
+{
+	UITableView * tableView = (UITableView *)self.superview;
+	id delegate = tableView.nextResponder; // Hopefully this is a TISwipeableTableViewController.
+	
+	if ([delegate respondsToSelector:@selector(tableView:shouldSwipeCellAtIndexPath:)]){
+		
+		NSIndexPath * myIndexPath = [tableView indexPathForCell:self];
+		
+		if ([delegate tableView:tableView shouldSwipeCellAtIndexPath:myIndexPath]){
+            if ([delegate respondsToSelector:@selector(hideVisibleBackView:)])
+                [delegate hideVisibleBackView:YES];
+			[self revealBackViewAnimated:YES inDirection:UISwipeGestureRecognizerDirectionLeft];
+			if ([delegate respondsToSelector:@selector(setIndexOfVisibleBackView:)]) {
+                [delegate setIndexOfVisibleBackView:myIndexPath];
+                [delegate setSwipeDirection:UISwipeGestureRecognizerDirectionLeft];
+            }
 			if ([delegate respondsToSelector:@selector(tableView:didSwipeCellAtIndexPath:)]){
 				[delegate tableView:tableView didSwipeCellAtIndexPath:myIndexPath];
 			}
@@ -249,8 +271,19 @@
 	}
 }
 
-- (void)revealBackViewAnimated:(BOOL)animated {
-	
+- (void)backViewWasSwiped:(UISwipeGestureRecognizer *)recognizer
+{
+    UITableView * tableView = (UITableView *)self.superview;
+	id delegate = tableView.nextResponder; // Hopefully this is a TISwipeableTableViewController.
+    
+    [self hideBackViewAnimated:YES inDirection:[delegate swipeDirection]];
+    if ([delegate respondsToSelector:@selector(setIndexOfVisibleBackView:)]) {
+        [delegate setIndexOfVisibleBackView:nil];
+    }
+}
+
+- (void)revealBackViewAnimated:(BOOL)animated inDirection:(UISwipeGestureRecognizerDirection)direction
+{
 	if (!contentViewMoving && backView.hidden){
 		
 		contentViewMoving = YES;
@@ -262,18 +295,22 @@
 		
 		oldStyle = self.selectionStyle;
 		[self setSelectionStyle:UITableViewCellSelectionStyleNone];
-		
-		[contentView.layer setAnchorPoint:CGPointMake(0, 0.5)];
-		[contentView.layer setPosition:CGPointMake(contentView.frame.size.width, contentView.layer.position.y)];
-		
-		if (animated){
-			
-			CABasicAnimation * animation = [CABasicAnimation animationWithKeyPath:@"position.x"];
-			[animation setRemovedOnCompletion:NO];
-			[animation setDelegate:self];
-			[animation setDuration:0.14];
-			[animation setTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear]];
-			[contentView.layer addAnimation:animation forKey:@"reveal"];
+
+		if (animated) {
+            [UIView beginAnimations:nil context:nil];
+            [UIView setAnimationDuration:0.2];
+            
+            if (direction == UISwipeGestureRecognizerDirectionRight) {
+                [contentView.layer setAnchorPoint:CGPointMake(0, 0.5)];
+                [contentView.layer setPosition:CGPointMake(contentView.frame.size.width, contentView.layer.position.y)];
+            } else {
+                [contentView.layer setAnchorPoint:CGPointMake(0, 0.5)];
+                [contentView.layer setPosition:CGPointMake(-contentView.frame.size.width, contentView.layer.position.y)];
+            }
+            [UIView setAnimationDelegate:self];
+            [UIView setAnimationCurve:UIViewAnimationCurveLinear];
+            [UIView setAnimationDidStopSelector:@selector(animationDidStopAddingBackView:finished:context:)];
+            [UIView commitAnimations];
 		}
 		else
 		{
@@ -285,34 +322,31 @@
 	}
 }
 
-- (void)hideBackViewAnimated:(BOOL)animated {
+#define BOUNCE_PIXELS 20.0
+
+- (void)hideBackViewAnimated:(BOOL)animated inDirection:(UISwipeGestureRecognizerDirection)direction
+{
 	
-	if (!backView.hidden){
+	if (!contentViewMoving && !backView.hidden){
 		
 		contentViewMoving = YES;
 		
 		[self backViewWillDisappear:animated];
 		
-		if (animated){
-			
-			CGFloat hideDuration = 0.09;
-			
-			[backView.layer setOpacity:0.0];
-			CABasicAnimation * hideAnimation = [CABasicAnimation animationWithKeyPath:@"opacity"];
-			[hideAnimation setFromValue:[NSNumber numberWithFloat:1.0]];
-			[hideAnimation setToValue:[NSNumber numberWithFloat:0.0]];
-			[hideAnimation setDuration:hideDuration];
-			[hideAnimation setRemovedOnCompletion:NO];
-			[hideAnimation setDelegate:self];
-			[backView.layer addAnimation:hideAnimation forKey:@"hide"];
-			
-			CGFloat originalX = contentView.layer.position.x;
-			[contentView.layer setAnchorPoint:CGPointMake(0, 0.5)];
-			[contentView.layer setPosition:CGPointMake(0, contentView.layer.position.y)];
-			[contentView.layer addAnimation:[self bounceAnimationWithHideDuration:hideDuration initialXOrigin:originalX] 
-									 forKey:@"bounce"];
-			
-			
+		if (animated) {
+            // The first step in a bounce animation is to move the side swipe view a bit offscreen
+            [UIView beginAnimations:nil context:(__bridge void *)([NSNumber numberWithInt:direction])];
+            [UIView setAnimationDuration:0.2];
+            if (direction == UISwipeGestureRecognizerDirectionLeft) {
+                [contentView.layer setAnchorPoint:CGPointMake(0, 0.5)];
+                [contentView.layer setPosition:CGPointMake(-BOUNCE_PIXELS/2, contentView.layer.position.y)];
+            } else {
+                [contentView.layer setAnchorPoint:CGPointMake(0, 0.5)];
+                [contentView.layer setPosition:CGPointMake(BOUNCE_PIXELS/2, contentView.layer.position.y)];
+            }
+            [UIView setAnimationDelegate:self];
+            [UIView setAnimationDidStopSelector:@selector(animationDidStopOne:finished:context:)];
+            [UIView commitAnimations];			
 		}
 		else
 		{
@@ -321,10 +355,44 @@
 	}
 }
 
+#pragma mark Bounce animation when removing the side swipe view
+// The next step in a bounce animation is to move the side swipe view a bit on screen
+- (void)animationDidStopOne:(NSString *)animationID finished:(NSNumber *)finished context:(void *)context
+{
+    UISwipeGestureRecognizerDirection direction = (UISwipeGestureRecognizerDirection)[(__bridge NSNumber *)context intValue];
+    [UIView beginAnimations:nil context:nil];
+    [UIView setAnimationDuration:0.2];
+    if (direction == UISwipeGestureRecognizerDirectionLeft) {
+        [contentView.layer setAnchorPoint:CGPointMake(0, 0.5)];
+        [contentView.layer setPosition:CGPointMake(-BOUNCE_PIXELS, contentView.layer.position.y)];
+    }
+    else {
+        [contentView.layer setAnchorPoint:CGPointMake(0, 0.5)];
+        [contentView.layer setPosition:CGPointMake(BOUNCE_PIXELS, contentView.layer.position.y)];
+    }
+    [UIView setAnimationDelegate:self];
+    [UIView setAnimationDidStopSelector:@selector(animationDidStopTwo:finished:context:)];
+    [UIView setAnimationCurve:UIViewAnimationCurveLinear];
+    [UIView commitAnimations];
+}
+
+// The final step in a bounce animation is to move the side swipe completely offscreen
+- (void)animationDidStopTwo:(NSString *)animationID finished:(NSNumber *)finished context:(void *)context
+{
+    [UIView commitAnimations];
+    [UIView beginAnimations:nil context:context];
+    [UIView setAnimationDuration:0.2];
+    
+    [contentView.layer setAnchorPoint:CGPointMake(0, 0.5)];
+    [contentView.layer setPosition:CGPointMake(0, contentView.layer.position.y)];
+    
+    [UIView setAnimationDelegate:self];
+    [UIView setAnimationDidStopSelector:@selector(animationDidStopHidingBackView:finished:context:)];
+    [UIView setAnimationCurve:UIViewAnimationCurveLinear];
+    [UIView commitAnimations];
+}
+
 - (void)resetViews:(BOOL)animated {
-	
-	[contentView.layer removeAllAnimations];
-	[backView.layer removeAllAnimations];
 	
 	contentViewMoving = NO;
 	
@@ -339,77 +407,20 @@
 	[self backViewDidDisappear:animated];
 }
 
-- (void)animationDidStop:(CAAnimation *)anim finished:(BOOL)flag {
-	
-	if (anim == [contentView.layer animationForKey:@"reveal"]){
-		[contentView.layer removeAnimationForKey:@"reveal"];
-		
-		[self backViewDidAppear:YES];
-		[self setSelected:NO];
-		
-		contentViewMoving = NO;
-	}
-	
-	if (anim == [contentView.layer animationForKey:@"bounce"]){
-		[contentView.layer removeAnimationForKey:@"bounce"];
-		[self resetViews:YES];
-	}
-	
-	if (anim == [backView.layer animationForKey:@"hide"]){
-		[backView.layer removeAnimationForKey:@"hide"];
-	}
+// Note that the animation is done
+- (void)animationDidStopAddingBackView:(NSString *)animationID finished:(NSNumber *)finished context:(void *)context
+{
+    [self backViewDidAppear:YES];
+    [self setSelected:NO];
+    
+    contentViewMoving = NO;
 }
 
-- (CAAnimationGroup *)bounceAnimationWithHideDuration:(CGFloat)hideDuration initialXOrigin:(CGFloat)originalX {
-	
-	CABasicAnimation * animation0 = [CABasicAnimation animationWithKeyPath:@"position.x"];
-	[animation0 setFromValue:[NSNumber numberWithFloat:originalX]];
-	[animation0 setToValue:[NSNumber numberWithFloat:0]];
-	[animation0 setDuration:hideDuration];
-	[animation0 setTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear]];
-	[animation0 setBeginTime:0];
-	
-	CAAnimationGroup * hideAnimations = [CAAnimationGroup animation];
-	[hideAnimations setAnimations:[NSArray arrayWithObject:animation0]];
-	
-	CGFloat fullDuration = hideDuration;
-	
-	if (shouldBounce){
-		
-		CGFloat bounceDuration = 0.04;
-		
-		CABasicAnimation * animation1 = [CABasicAnimation animationWithKeyPath:@"position.x"];
-		[animation1 setFromValue:[NSNumber numberWithFloat:0]];
-		[animation1 setToValue:[NSNumber numberWithFloat:-20]];
-		[animation1 setDuration:bounceDuration];
-		[animation1 setTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear]];
-		[animation1 setBeginTime:hideDuration];
-		
-		CABasicAnimation * animation2 = [CABasicAnimation animationWithKeyPath:@"position.x"];
-		[animation2 setFromValue:[NSNumber numberWithFloat:-20]];
-		[animation2 setToValue:[NSNumber numberWithFloat:15]];
-		[animation2 setDuration:bounceDuration];
-		[animation2 setTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear]];
-		[animation2 setBeginTime:(hideDuration + bounceDuration)];
-		
-		CABasicAnimation * animation3 = [CABasicAnimation animationWithKeyPath:@"position.x"];
-		[animation3 setFromValue:[NSNumber numberWithFloat:15]];
-		[animation3 setToValue:[NSNumber numberWithFloat:0]];
-		[animation3 setDuration:bounceDuration];
-		[animation3 setTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear]];
-		[animation3 setBeginTime:(hideDuration + (bounceDuration * 2))];
-		
-		[hideAnimations setAnimations:[NSArray arrayWithObjects:animation0, animation1, animation2, animation3, nil]];
-		
-		fullDuration = hideDuration + (bounceDuration * 3);
-	}
-	
-	[hideAnimations setDuration:fullDuration];
-	[hideAnimations setTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear]];
-	[hideAnimations setDelegate:self];
-	[hideAnimations setRemovedOnCompletion:NO];
-	
-	return hideAnimations;
+- (void)animationDidStopHidingBackView:(NSString *)animationID finished:(NSNumber *)finished context:(void *)context
+{
+    [self resetViews:YES];
+    
+    contentViewMoving = NO;
 }
 
 #pragma mark - Other

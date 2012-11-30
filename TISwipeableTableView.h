@@ -34,9 +34,11 @@
 
 @interface TISwipeableTableViewController : UITableViewController {
 	NSIndexPath * indexOfVisibleBackView;
+    UISwipeGestureRecognizerDirection swipeDirection;
 }
 
-@property (nonatomic, retain, readonly) NSIndexPath * indexOfVisibleBackView;
+@property (nonatomic, strong, readonly) NSIndexPath * indexOfVisibleBackView;
+@property (nonatomic) UISwipeGestureRecognizerDirection swipeDirection;
 
 // Thanks to Martin Destagnol (@mdestagnol) for this method.
 - (BOOL)tableView:(UITableView *)tableView shouldSwipeCellAtIndexPath:(NSIndexPath *)indexPath;
@@ -80,7 +82,7 @@
 - (void)backViewWillDisappear:(BOOL)animated;
 - (void)backViewDidDisappear:(BOOL)animated;
 
-- (void)revealBackViewAnimated:(BOOL)animated;
-- (void)hideBackViewAnimated:(BOOL)animated;
+- (void)revealBackViewAnimated:(BOOL)animated inDirection:(UISwipeGestureRecognizerDirection)direction;
+- (void)hideBackViewAnimated:(BOOL)animated inDirection:(UISwipeGestureRecognizerDirection)direction;
 
 @end
