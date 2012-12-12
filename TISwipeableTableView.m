@@ -337,7 +337,7 @@
 		
 		if (animated) {
             // The first step in a bounce animation is to move the side swipe view a bit offscreen
-            [UIView beginAnimations:nil context:(__bridge void *)([NSNumber numberWithInt:direction])];
+            [UIView beginAnimations:nil context:(void *)([NSNumber numberWithInt:direction])];
             [UIView setAnimationDuration:0.2];
             if (direction == UISwipeGestureRecognizerDirectionLeft) {
                 [contentView.layer setAnchorPoint:CGPointMake(0, 0.5)];
@@ -361,7 +361,7 @@
 // The next step in a bounce animation is to move the side swipe view a bit on screen
 - (void)animationDidStopOne:(NSString *)animationID finished:(NSNumber *)finished context:(void *)context
 {
-    UISwipeGestureRecognizerDirection direction = (UISwipeGestureRecognizerDirection)[(__bridge NSNumber *)context intValue];
+    UISwipeGestureRecognizerDirection direction = (UISwipeGestureRecognizerDirection)[(NSNumber *)context intValue];
     [UIView beginAnimations:nil context:nil];
     [UIView setAnimationDuration:0.2];
     if (direction == UISwipeGestureRecognizerDirectionLeft) {
