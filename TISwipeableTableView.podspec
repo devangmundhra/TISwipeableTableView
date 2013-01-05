@@ -5,7 +5,7 @@ Pod::Spec.new do |s|
   s.summary      = "Allows you to swipe a UITableViewCell and reveal a back view, functions like cells in the Twitter app."
   s.homepage     = "https://github.com/devangmundhra/TISwipeableTableView"
   s.author       = { "Devang Mundhra" => "devangmundhra@gmail.com" }
-  s.source       = { :git => "https://github.com/devangmundhra/TISwipeableTableView.git", :commit => "19aa55a6f69cf258232fb93be733699ede9ba266" }
+  s.source       = { :git => "https://github.com/devangmundhra/TISwipeableTableView.git", :commit => "984e562a4585240093f64f757dbab4ef515af4fb" }
   s.license  	 = {
   	:type => 'BSD',
   	:text => <<-LICENSE
